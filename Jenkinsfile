@@ -1,6 +1,7 @@
 pipeline {
     agent any 
 
+    // Specifying tools to be used
     tools {
         maven "MAVEN3"
         jdk "OracleJDK17"
