@@ -27,7 +27,7 @@ pipeline {
         SONARSCANNER = 'sonarscanner'
         SONARSERVER = 'sonarserver'
         // AWS Credential, through which ecr can be accessed
-        // format : 'ecr:<region>:<credentialID> ' 
+        // format : 'ecr:<region>:<credentialID>' 
         registryCredential = 'ecr:us-east-1:awscreds'
         // ECR registery URI
         appRegistery = '495287304242.dkr.ecr.us-east-1.amazonaws.com/vprofileappimg'
