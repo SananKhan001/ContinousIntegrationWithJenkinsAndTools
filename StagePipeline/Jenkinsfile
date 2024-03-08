@@ -30,9 +30,9 @@ pipeline {
         // format : 'ecr:<region>:<credentialID>' 
         registryCredential = 'ecr:us-east-1:awscreds'
         // ECR registery URI
-        appRegistery = '495287304242.dkr.ecr.us-east-1.amazonaws.com/vprofileappimg'
+        appRegistry = '495287304242.dkr.ecr.us-east-1.amazonaws.com/vprofileappimg'
         // ECR repository URL
-        vprofileRegistery = 'https://495287304242.dkr.ecr.us-east-1.amazonaws.com'
+        vprofileRegistry = 'https://495287304242.dkr.ecr.us-east-1.amazonaws.com'
     }
 
     stages {
@@ -114,7 +114,7 @@ pipeline {
         stage ('Build App Image') {
             steps {
                 script {
-                    dockerImage = docker.build( aappRegistery + ":$BUILD_NUMBER", "./Docker-files/app/multistage/")
+                    dockerImage = docker.build( appRegistry + ":$BUILD_NUMBER", "./Docker-files/app/multistage/")
                 }
             }
         }
@@ -122,7 +122,7 @@ pipeline {
         stage ('Upload App Image') {
             steps {
                 script {
-                    docker.withRegistery( vprofileRegistery, registryCredential ) {
+                    docker.withRegistry( vprofileRegistry, registryCredential ) {
                         dockerImage.push("$BUILD_NUMBER")
                         dockerImage.push('latest')
                     }
