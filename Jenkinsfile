@@ -1,0 +1,143 @@
+
+def COLOUR_MAP = [
+    'SUCCESS': 'good',
+    'FAILURE': 'danger',
+    'ABORTED': 'danger',
+]
+
+pipeline {
+    agent any 
+
+    // Specifying tools to be used
+    tools {
+        maven "MAVEN3"
+        jdk "OracleJDK17"
+    }
+
+    environment {
+        SNAP_REPO = 'vprofile-snapshot'
+        NEXUS_USER = 'admin'
+        NEXUS_PASS = 'admin'
+        RELEASE_REPO = 'vprofile-release'
+        CENTRAL_REPO = 'vpro-maven-central'
+        NEXUS_IP = '10.0.13.28'
+        NEXUS_PORT = '8081'
+        NEXUS_GRP_REPO = 'vprofile-maven-group'
+        NEXUS_LOGIN = 'nexuslogin'
+        SONARSCANNER = 'sonarscanner'
+        SONARSERVER = 'sonarserver'
+        // AWS Credential, through which ecr can be accessed
+        // format : 'ecr:<region>:<credentialID>' 
+        registryCredential = 'ecr:us-east-1:awscreds'
+        // ECR registery URI
+        appRegistery = '495287304242.dkr.ecr.us-east-1.amazonaws.com/vprofileappimg'
+        // ECR repository URL
+        vprofileRegistery = 'https://495287304242.dkr.ecr.us-east-1.amazonaws.com'
+    }
+
+    stages {
+        stage('Build') {
+            steps {
+                echo "Executing Build Stage"
+                sh 'mvn -s settings.xml -DskipTests install'
+            }
+            post {
+                success {
+                    echo "Build Success"
+                    echo 'Now Archiving.'
+                    archiveArtifacts artifacts: '**/*.war'
+                }
+            }
+        }
+
+        stage('Test') {
+            steps {
+                echo 'Executing Test Stage'
+                sh 'mvn -s settings.xml test'
+            }
+        }
+
+        stage('Checkstyle Analysis') {
+            steps {
+                echo 'Executing Checkstyle Analysis Stage'
+                sh 'mvn -s settings.xml checkstyle:checkstyle'
+            }
+        }
+
+        stage('Sonar Analysis') {
+            environment {
+                scannerHome = tool "${SONARSCANNER}"
+            }
+            steps {
+               withSonarQubeEnv("${SONARSERVER}") {
+                   sh '''${scannerHome}/bin/sonar-scanner -Dsonar.projectKey=vprofile \
+                   -Dsonar.projectName=vprofile \
+                   -Dsonar.projectVersion=1.0 \
+                   -Dsonar.sources=src/ \
+                   -Dsonar.java.binaries=target/test-classes/com/visualpathit/account/controllerTest/ \
+                   -Dsonar.junit.reportsPath=target/surefire-reports/ \
+                   -Dsonar.jacoco.reportsPath=target/jacoco.exec \
+                   -Dsonar.java.checkstyle.reportPaths=target/checkstyle-result.xml'''
+              } 
+            }
+        }
+
+        stage('Quality Gate') {
+            steps {
+                timeout(2) {
+                    // some block 
+                    waitForQualityGate abortPipeline: true 
+                }
+            }
+        }
+
+        stage('UploadArtifact') {
+            steps {
+                    nexusArtifactUploader(
+                        nexusVersion: 'nexus3',
+                        protocol: 'http',
+                        nexusUrl: "${NEXUS_IP}:${NEXUS_PORT}",
+                        groupId: 'QA',
+                        version: "${env.BUILD_ID}-${env.BUILD_TIMESTAMP}",
+                        repository: "${RELEASE_REPO}",
+                        credentialsId: "${NEXUS_LOGIN}",
+                        artifacts: [
+                            [artifactId: 'vproapp',
+                            classifier: '',
+                            file: 'target/vprofile-v2.war',
+                            type: 'war']
+                        ]
+                    )
+            }
+        }
+
+        stage ('Build App Image') {
+            steps {
+                script {
+                    dockerImage = docker.build( aappRegistery + ":$BUILD_NUMBER", "./Docker-files/app/multistage/")
+                }
+            }
+        }
+
+        stage ('Upload App Image') {
+            steps {
+                script {
+                    docker.withRegistery( vprofileRegistery, registryCredential ) {
+                        dockerImage.push("$BUILD_NUMBER")
+                        dockerImage.push('latest')
+                    }
+                }
+            }
+        }
+
+    }
+    
+    post {
+        always {
+            slackSend channel: '#devops', 
+                color: COLOUR_MAP[currentBuild.currentResult], 
+                message: "*${currentBuild.currentResult}:* Job ${env.JOB_NAME} build ${env.BUILD_NUMBER} \n More info at ${env.BUILD_URL}"
+        }
+    }
+
+}
