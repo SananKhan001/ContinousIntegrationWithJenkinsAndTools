@@ -33,6 +33,10 @@ pipeline {
         appRegistry = '495287304242.dkr.ecr.us-east-1.amazonaws.com/vprofileappimg'
         // ECR repository URL
         vprofileRegistry = 'https://495287304242.dkr.ecr.us-east-1.amazonaws.com'
+        // Give cluster name
+        cluster = 'vprostaging'
+        // Give service name
+        service = 'vproappstagesvc'
     }
 
     stages {
@@ -126,6 +130,15 @@ pipeline {
                         dockerImage.push("$BUILD_NUMBER")
                         dockerImage.push('latest')
                     }
+                }
+            }
+        }
+
+        stage ('Deploy to ECS Staging') {
+            steps {
+                withAWS(credentials: 'awscreds', region: 'us-east-1') {
+                    // some block
+                    sh 'aws ecs update-service --cluster ${cluster} --service ${service} --force-new-deployment'
                 }
             }
         }
